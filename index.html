@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Logic Quiz & Letter Puzzle with Movable Spaces</title>
+<style>
+  body {
+    background: linear-gradient(135deg, #f8cdda, #1d2b64);
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    color: white;
+    margin: 0;
+    min-height: 100vh;
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    padding: 40px 0;
+  }
+  #container {
+    background: rgba(0,0,0,0.85);
+    padding: 30px 40px;
+    border-radius: 15px;
+    width: 520px;
+    box-shadow: 0 0 30px #ff4a6e;
+    text-align: center;
+  }
+  h1 {
+    margin-bottom: 25px;
+    letter-spacing: 2px;
+  }
+  .question-block {
+    margin-bottom: 20px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+    justify-content: flex-start;
+  }
+  label {
+    font-weight: 600;
+    font-size: 1rem;
+    flex: 1 1 220px;
+    min-width: 220px;
+    text-align: left;
+  }
+  input[type=text] {
+    padding: 8px 10px;
+    font-size: 1rem;
+    border-radius: 6px;
+    border: none;
+    outline: none;
+    width: 140px;
+    box-sizing: border-box;
+    text-transform: lowercase;
+  }
+  button {
+    background: #ff4a6e;
+    border: none;
+    padding: 8px 18px;
+    font-size: 1rem;
+    border-radius: 8px;
+    color: white;
+    cursor: pointer;
+    font-weight: bold;
+    transition: background 0.3s;
+    flex-shrink: 0;
+  }
+  button:hover:not(:disabled) {
+    background: #ff1a4d;
+  }
+  button:disabled {
+    background: #888;
+    cursor: not-allowed;
+  }
+  .feedback {
+    min-width: 140px;
+    font-weight: 600;
+    margin-left: 10px;
+    font-size: 0.95rem;
+    user-select: none;
+  }
+  #letters-container {
+    margin-top: 35px;
+    display: none;
+  }
+  #letters-instructions {
+    font-weight: 600;
+    margin-bottom: 12px;
+    font-size: 1.1rem;
+  }
+  #letter-counts {
+    margin-bottom: 18px;
+    font-size: 1rem;
+    color: #ffd6e0;
+  }
+  #letters-puzzle {
+    display: flex;
+    justify-content: center;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+  .letter-tile {
+    background: #ff6f91;
+    width: 50px;
+    height: 60px;
+    line-height: 60px;
+    font-size: 2rem;
+    font-weight: bold;
+    border-radius: 10px;
+    user-select: none;
+    cursor: grab;
+    color: white;
+    text-align: center;
+    text-transform: uppercase;
+  }
+  .letter-tile.space {
+    background: #666;
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: #ddd;
+  }
+  .letter-tile.dragging {
+    opacity: 0.5;
+    cursor: grabbing;
+  }
+  #final-message {
+    margin-top: 30px;
+    font-size: 1.4rem;
+    color: #ffd6e0;
+    font-weight: 700;
+    min-height: 40px;
+  }
+  @media (max-width: 560px) {
+    #container {
+      width: 90vw;
+      padding: 20px;
+    }
+    .question-block {
+      flex-direction: column;
+      align-items: stretch;
+      gap: 6px;
+    }
+    label {
+      min-width: auto;
+      flex: none;
+      text-align: left;
+    }
+    input[type=text], button, .feedback {
+      width: 100%;
+      margin-left: 0;
+    }
+  }
+</style>
+</head>
+<body>
+  <div id="container">
+    <h1>Logic Quiz & Letter Puzzle</h1>
+
+    <div id="quiz-container">
+      <!-- Questions injected here -->
+    </div>
+
+    <div id="letters-container">
+      <div id="letter-counts"></div>
+      <div id="letters-instructions">Rearrange the letters (and spaces) to reveal the secret message:</div>
+      <div id="letters-puzzle"></div>
+      <button id="submit-puzzle" disabled>Submit Answer</button>
+      <div id="final-message"></div>
+    </div>
+  </div>
+
+<script>
+(() => {
+  const secretPhrase = "I LIKE YOU";
+
+  const questions = [
+    { text: "What do you call a plan or thought? (e.g., a new ___)", answer: "idea", letter: "I" },
+    { text: "What big cat is known as the king of the jungle?", answer: "lion", letter: "L" },
+    { text: "What small creature has six legs and can jump?", answer: "insect", letter: "I" },
+    { text: "What room in a house is used for cooking?", answer: "kitchen", letter: "K" },
+    { text: "What word means a fundamental substance or part?", answer: "element", letter: "E" },
+    { text: "What word describes someone who is not old?", answer: "young", letter: "Y" },
+    { text: "What fruit is round, orange, and sweet?", answer: "orange", letter: "O" },
+    { text: "What word means to move upwards?", answer: "up", letter: "U" }
+  ];
+
+  function shuffleArray(arr) {
+    const array = arr.slice();
+    for(let i = array.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i+1));
+      [array[i], array[j]] = [array[j], array[i]];
+    }
+    return array;
+  }
+
+  const quizContainer = document.getElementById('quiz-container');
+  const lettersContainer = document.getElementById('letters-container');
+  const lettersPuzzle = document.getElementById('letters-puzzle');
+  const submitPuzzleBtn = document.getElementById('submit-puzzle');
+  const finalMessage = document.getElementById('final-message');
+  const letterCountsDiv = document.getElementById('letter-counts');
+
+  let revealedLettersMap = {};
+  let shuffledQuestions = shuffleArray(questions);
+
+  function createQuestionBlock(q, index) {
+    const block = document.createElement('div');
+    block.className = 'question-block';
+    block.id = `question-${index}`;
+
+    const label = document.createElement('label');
+    label.textContent = q.text;
+    label.setAttribute('for', `answer-${index}`);
+
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.id = `answer-${index}`;
+    input.autocomplete = 'off';
+    input.spellcheck = false;
+
+    const button = document.createElement('button');
+    button.textContent = 'Check';
+    button.onclick = () => checkAnswer(index);
+
+    const feedback = document.createElement('div');
+    feedback.className = 'feedback';
+    feedback.id = `feedback-${index}`;
+
+    block.appendChild(label);
+    block.appendChild(input);
+    block.appendChild(button);
+    block.appendChild(feedback);
+
+    if(index !== 0) {
+      block.style.display = 'none';
+    }
+
+    return block;
+  }
+
+  function renderQuiz() {
+    shuffledQuestions.forEach((q, i) => {
+      const block = createQuestionBlock(q, i);
+      quizContainer.appendChild(block);
+    });
+  }
+
+  function countLetters(str) {
+    const counts = {};
+    for (const ch of str) {
+      counts[ch] = (counts[ch] || 0) + 1;
+    }
+    return counts;
+  }
+
+  function displayLetterCounts() {
+    const counts = countLetters(secretPhrase);
+    const parts = [];
+    for (const [ch, count] of Object.entries(counts)) {
+      if (ch === ' ') {
+        parts.push(`space (${count}x)`);
+      } else {
+        parts.push(`${ch.toUpperCase()} (${count}x)`);
+      }
+    }
+    letterCountsDiv.textContent = "Letters to find: " + parts.join(', ');
+  }
+
+  function checkAnswer(index) {
+    const input = document.getElementById(`answer-${index}`);
+    const feedback = document.getElementById(`feedback-${index}`);
+    const userAnswer = input.value.trim().toLowerCase();
+
+    if(userAnswer === "") {
+      feedback.textContent = "Please enter an answer.";
+      feedback.style.color = "#ffb3c6";
+      return;
+    }
+
+    if(userAnswer === shuffledQuestions[index].answer) {
+      feedback.textContent = "Correct! 🎉";
+      feedback.style.color = "#a0ffb3";
+
+      revealedLettersMap[shuffledQuestions[index].letter] = shuffledQuestions[index].letter;
+
+      input.disabled = true;
+      input.nextElementSibling.disabled = true;
+
+      if(index + 1 < shuffledQuestions.length) {
+        document.getElementById(`question-${index + 1}`).style.display = 'block';
+        window.scrollTo({top: document.getElementById(`question-${index + 1}`).offsetTop - 20, behavior: 'smooth'});
+      } else {
+        showLetterPuzzle();
+      }
+    } else {
+      feedback.textContent = "Try again! 🤔";
+      feedback.style.color = "#ffb3c6";
+    }
+  }
+
+  let dragSrcEl = null;
+
+  function handleDragStart(e) {
+    dragSrcEl = this;
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/html', this.innerHTML);
+    this.classList.add('dragging');
+  }
+
+  function handleDragOver(e) {
+    if(e.preventDefault) e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    return false;
+  }
+
+  function handleDragEnter() {
+    this.classList.add('over');
+  }
+
+  function handleDragLeave() {
+    this.classList.remove('over');
+  }
+
+  function handleDrop(e) {
+    if(e.stopPropagation) e.stopPropagation();
+
+    if(dragSrcEl !== this) {
+      const temp = this.innerHTML;
+      this.innerHTML = dragSrcEl.innerHTML;
+      dragSrcEl.innerHTML = temp;
+
+      // Also swap classes for space styling
+      const tempClass = this.className;
+      this.className = dragSrcEl.className;
+      dragSrcEl.className = tempClass;
+    }
+    return false;
+  }
+
+  function handleDragEnd() {
+    const tiles = lettersPuzzle.querySelectorAll('.letter-tile');
+    tiles.forEach(tile => {
+      tile.classList.remove('over');
+      tile.classList.remove('dragging');
+    });
+  }
+
+  function showLetterPuzzle() {
+    quizContainer.style.display = 'none';
+    lettersContainer.style.display = 'block';
+
+    displayLetterCounts();
+
+    const lettersArray = secretPhrase.split('');
+
+    // Shuffle letters and spaces
+    const shuffled = lettersArray.slice();
+    for(let i = shuffled.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i+1));
+      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    }
+
+    lettersPuzzle.innerHTML = '';
+    finalMessage.textContent = '';
+    submitPuzzleBtn.disabled = false;
+
+    shuffled.forEach(ch => {
+      const tile = document.createElement('div');
+      tile.className = 'letter-tile';
+      tile.textContent = (ch === ' ') ? '\u00A0' : ch;
+      if(ch === ' ') {
+        tile.classList.add('space');
+      }
+      tile.setAttribute('draggable', 'true');
+      tile.addEventListener('dragstart', handleDragStart);
+      tile.addEventListener('dragenter', handleDragEnter);
+      tile.addEventListener('dragover', handleDragOver);
+      tile.addEventListener('dragleave', handleDragLeave);
+      tile.addEventListener('drop', handleDrop);
+      tile.addEventListener('dragend', handleDragEnd);
+
+      lettersPuzzle.appendChild(tile);
+    });
+  }
+
+  function checkPuzzleSolution() {
+  const tiles = lettersPuzzle.querySelectorAll('.letter-tile');
+  let current = '';
+  tiles.forEach(t => {
+    current += (t.textContent === '\u00A0') ? ' ' : t.textContent;
+  });
+  if(current.toUpperCase() === secretPhrase) {
+    finalMessage.textContent = "🎉 You solved it! I LIKE YOU ❤️ Redirecting...";
+    submitPuzzleBtn.disabled = true;
+    lettersPuzzle.querySelectorAll('.letter-tile').forEach(t => t.setAttribute('draggable', 'false'));
+
+    // Redirect after short delay to let user see the message
+    setTimeout(() => {
+      window.location.href = "https:/heroharley.github.io/game1/index2.html/"; // <-- Replace with your URL
+    }, 2000);
+  } else {
+    finalMessage.textContent = "Not quite yet, try rearranging the letters and spaces! 🤔";
+  }
+}
+
+
+  submitPuzzleBtn.addEventListener('click', checkPuzzleSolution);
+
+  renderQuiz();
+})();
+</script>
+</body>
+</html>
